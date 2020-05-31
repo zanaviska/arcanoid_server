@@ -137,11 +137,11 @@ int main()
                 sendto(listener, resp.data(), resp.length(), MSG_CONFIRM, reinterpret_cast<sockaddr *>(&client), addr_size);
                 resp = "{\"port\": " + std::to_string(new_port) + ", \"date\": " + q_date + "}";
                 sendto(listener, resp.data(), resp.length(), MSG_CONFIRM, reinterpret_cast<sockaddr *>(&q_client), addr_size);
-                std::async(play_game, q_id, q_client, id, client, new_port);
-
+                //std::async(std::launch::async, play_game, q_id, q_client, id, client, new_port);
+                std::thread(play_game, q_id, q_client, id, client, new_port).detach();
+                std::cout << "Does?";
                 q_id = -1;
             }
         }
-
     }
 }
