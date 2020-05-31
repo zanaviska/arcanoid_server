@@ -10,6 +10,26 @@
 
 using namespace std;
 
+template<class F, class... Args>
+void set_interval(std::atomic_bool& cancel_token, size_t interval, F&& f, Args&... args)
+{
+    cancel_token.store(true);
+    auto cb = std::bind(std::forward<F>(f), std::forward<Args>(args)...);
+    std::thread([=, &cancel_token]()mutable
+    {
+        while(cancel_token.load())
+        {
+            cb();
+            std::this_thread::sleep_for(std::chrono::milliseconds(interval));
+        }
+    }).detach();
+}
+
+void send(int &listener, sockaddr_in& me, sockaddr_in client, double dest, double pos, double x, double y, double vx, double vy)
+{
+
+}
+
 void play_game(long long id1, sockaddr_in client1, long long id2, sockaddr_in client2, int port)
 {
     std::cout << "logged\n";
@@ -20,9 +40,59 @@ void play_game(long long id1, sockaddr_in client1, long long id2, sockaddr_in cl
     me.sin_port = htons(port);
     me.sin_addr.s_addr = inet_addr("0.0.0.0");
     bind(listener, reinterpret_cast<const sockaddr *>(&me), sizeof(me));
-    std::string resp{"{\"port\": " + std::to_string(port) + "}"};
-    sendto(listener, resp.data(), resp.length(), MSG_CONFIRM, reinterpret_cast<sockaddr *>(&client1), sizeof(sockaddr_in));
-    sendto(listener, resp.data(), resp.length(), MSG_CONFIRM, reinterpret_cast<sockaddr *>(&client2), sizeof(sockaddr_in));
+    std::atomic_bool b1;
+    //set_interval(b1, 1000, printf, "hi");
+    sockaddr_in client;
+    socklen_t addr_size = sizeof(client);
+    double pos1 = 0.5;
+    double pos2 = 0.5;
+    double dest1 = 0.5;
+    double dest2 = 0.5;
+    double x = 0.5;
+    double y = 0.5;
+    double vx = 0;
+    double vy = 0;
+    int blocks = 0x00ffffff;
+    sockaddr * target;
+    while(1)
+    {
+        std::string buf(1024, 0);
+        int ln = recvfrom(listener, buf.data(), 1024, 0, reinterpret_cast<sockaddr *>(&client), &addr_size);
+        buf[ln] = 0;
+        std::stringstream ss;
+        ss << buf;
+        int id;
+        long long date;
+        double dest;
+        double pos;
+        std::string str;
+        for(int i = 0; i < 4; i++)
+        {
+            ss >> str;
+            if(str == "id") ss >> id;
+            if(str == "dest") ss >> dest;
+            if(str == "pos") ss >> pos;
+            if(str == "date") ss >> date;
+        }
+        dest = !!(dest-pos)*0.05 + pos;
+        std::string resp;
+        if(id1 == id)
+        {
+            target = reinterpret_cast<sockaddr *>(&client2);
+            resp = std::string("{\"x\": " + std::to_string(x) + ", \"y\": " + std::to_string(y) +
+                    ", \"vx\": " + std::to_string(vx) + ", \"vy\": " + std::to_string(vy) + ", \"blocks\": " + std::to_string(blocks) +
+                    ", \"pos\": " + std::to_string(1-pos) + ", \"dest\": " + std::to_string(-dest) + ", \"date\": " + std::to_string(date) + "}");
+
+        }
+        else
+        {
+            resp = std::string("{\"x\": " + std::to_string(1-x) + ", \"y\": " + std::to_string(1-y) +
+                               ", \"vx\": " + std::to_string(-vx) + ", \"vy\": " + std::to_string(-vy) +", \"blocks\": " + std::to_string(blocks) +
+                               ", \"pos\": " + std::to_string(1-pos) + ", \"dest\": " + std::to_string(-dest) + ", \"date\": " + std::to_string(date) + "}");
+        }
+        std::cout << buf.data() << '\n';
+        sendto(listener, resp.data(), resp.length(), MSG_CONFIRM, reinterpret_cast<sockaddr *>(&client), sizeof(sockaddr_in));
+    }
 }
 
 int main()
