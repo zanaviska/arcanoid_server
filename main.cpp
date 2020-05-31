@@ -8,7 +8,7 @@
 #include <thread>
 #include <future>
 
-using namespace std;
+using namespace std::chrono;
 
 template<class F, class... Args>
 void set_interval(std::atomic_bool& cancel_token, size_t interval, F&& f, Args&... args)
@@ -19,16 +19,12 @@ void set_interval(std::atomic_bool& cancel_token, size_t interval, F&& f, Args&.
     {
         while(cancel_token.load())
         {
-            cb();
             std::this_thread::sleep_for(std::chrono::milliseconds(interval));
+            cb();
         }
     }).detach();
 }
 
-void send(int &listener, sockaddr_in& me, sockaddr_in client, double dest, double pos, double x, double y, double vx, double vy)
-{
-
-}
 
 void play_game(long long id1, sockaddr_in client1, long long id2, sockaddr_in client2, int port)
 {
@@ -40,7 +36,6 @@ void play_game(long long id1, sockaddr_in client1, long long id2, sockaddr_in cl
     me.sin_port = htons(port);
     me.sin_addr.s_addr = inet_addr("0.0.0.0");
     bind(listener, reinterpret_cast<const sockaddr *>(&me), sizeof(me));
-    std::atomic_bool b1;
     //set_interval(b1, 1000, printf, "hi");
     sockaddr_in client;
     socklen_t addr_size = sizeof(client);
@@ -53,6 +48,14 @@ void play_game(long long id1, sockaddr_in client1, long long id2, sockaddr_in cl
     double vx = 0;
     double vy = 0;
     int blocks = 0x00ffffff;
+    std::atomic_bool b1;
+    int cnt = 0;
+    set_interval(b1, 3000, [&]()
+    {
+        //cnt++;
+        if(vx == 0 && vy == 0) vx = 0.8, vy = 0.4;
+        std::cout << vx << ' ' << vy << ' ' << x << ' ' << y << '\n';
+    });
     sockaddr * target;
     while(1)
     {
@@ -74,24 +77,31 @@ void play_game(long long id1, sockaddr_in client1, long long id2, sockaddr_in cl
             if(str == "pos") ss >> pos;
             if(str == "date") ss >> date;
         }
+        long long last = 2*duration_cast< milliseconds >(system_clock::now().time_since_epoch()).count() - date;
+        //auto now = duration_cast< milliseconds >(system_clock::now().time_since_epoch());
+        //std::cout << date << ' ' << last << '\n';
+
         dest = !!(dest-pos)*0.05 + pos;
         std::string resp;
         if(id1 == id)
         {
+            client1 = client;
             target = reinterpret_cast<sockaddr *>(&client2);
             resp = std::string("{\"x\": " + std::to_string(x) + ", \"y\": " + std::to_string(y) +
                     ", \"vx\": " + std::to_string(vx) + ", \"vy\": " + std::to_string(vy) + ", \"blocks\": " + std::to_string(blocks) +
-                    ", \"pos\": " + std::to_string(1-pos) + ", \"dest\": " + std::to_string(-dest) + ", \"date\": " + std::to_string(date) + "}");
+                    ", \"pos\": " + std::to_string(1-pos) + ", \"dest\": " + std::to_string(1-dest) + ", \"date\": " + std::to_string(date) + "}");
 
         }
         else
         {
+            client2 = client;
+            target = reinterpret_cast<sockaddr *>(&client1);
             resp = std::string("{\"x\": " + std::to_string(1-x) + ", \"y\": " + std::to_string(1-y) +
                                ", \"vx\": " + std::to_string(-vx) + ", \"vy\": " + std::to_string(-vy) +", \"blocks\": " + std::to_string(blocks) +
                                ", \"pos\": " + std::to_string(1-pos) + ", \"dest\": " + std::to_string(-dest) + ", \"date\": " + std::to_string(date) + "}");
         }
         std::cout << buf.data() << '\n';
-        sendto(listener, resp.data(), resp.length(), MSG_CONFIRM, reinterpret_cast<sockaddr *>(&client), sizeof(sockaddr_in));
+        sendto(listener, resp.data(), resp.length(), MSG_CONFIRM, target, sizeof(sockaddr_in));
     }
 }
 
@@ -213,5 +223,6 @@ int main()
                 q_id = -1;
             }
         }
+
     }
 }
