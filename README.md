@@ -18,7 +18,7 @@ Declaration of all available for usage function is located in server.h file
 
 function initialization is located in server.cpp file
 
-#API
+# API
 
 void main_handle(int port)
 
